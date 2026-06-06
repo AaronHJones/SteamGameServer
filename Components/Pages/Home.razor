@@ -1,0 +1,77 @@
+﻿@page "/"
+@inject GameServerManager Manager
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Dashboard — Game Server Monitor</PageTitle>
+
+<div class="d-flex align-center justify-space-between mb-4">
+    <MudText Typo="Typo.h5" Class="d-flex align-center gap-2">
+        <MudIcon Icon="@Icons.Material.Filled.Dashboard" Style="color:#ff6b35;" />
+        Dashboard
+    </MudText>
+    <MudButton Variant="Variant.Outlined"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.AddCircleOutline"
+               OnClick='() => Nav.NavigateTo("/server/add")'>
+        Add Server
+    </MudButton>
+</div>
+
+@{
+    var monitors = Manager.GetAll();
+    var online = monitors.Count(m => m.GetSnapshot().IsOnline);
+}
+
+<!-- Summary chips -->
+<div class="d-flex gap-2 flex-wrap mb-4">
+    <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">
+        @monitors.Count total
+    </MudChip>
+    <MudChip T="string" Color="Color.Success" Variant="Variant.Outlined" Size="Size.Small">
+        @online online
+    </MudChip>
+    <MudChip T="string" Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small">
+        @(monitors.Count - online) offline
+    </MudChip>
+    <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Size="Size.Small">
+        @monitors.Sum(m => m.GetSnapshot().Players.Count) players total
+    </MudChip>
+</div>
+
+@if (!monitors.Any())
+{
+    <MudPaper Class="pa-8 d-flex flex-column align-center"
+              Style="background:#1a1a2e; border:1px dashed rgba(255,107,53,0.3);">
+        <MudIcon Icon="@Icons.Material.Filled.Storage"
+                 Style="font-size:3rem; color:#ff6b35; opacity:0.4;" />
+        <MudText Typo="Typo.h6" Class="mt-3" Style="opacity:0.6;">No servers configured</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4" Style="opacity:0.4;">
+            Add your first game server to start monitoring.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick='() => Nav.NavigateTo("/server/add")'>
+            Add Server
+        </MudButton>
+    </MudPaper>
+}
+else
+{
+    <MudGrid Spacing="3">
+        @foreach (var monitor in monitors)
+        {
+            var snap = monitor.GetSnapshot();
+            <MudItem xs="12" sm="6" md="4" lg="3">
+                <ServerCard Server="monitor.Server" Snap="snap" />
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    protected override void OnInitialized() => Manager.OnAnyUpdate += Refresh;
+    private async void Refresh() => await InvokeAsync(StateHasChanged);
+    public void Dispose() => Manager.OnAnyUpdate -= Refresh;
+}

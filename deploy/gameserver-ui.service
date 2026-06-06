@@ -1,0 +1,23 @@
+[Unit]
+Description=Game Server Monitor (Blazor)
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+WorkingDirectory=/opt/gameserver-ui
+ExecStart=/usr/bin/dotnet /opt/gameserver-ui/RustServerHealth.dll
+Restart=on-failure
+RestartSec=10
+Environment=ASPNETCORE_URLS=http://localhost:5050
+Environment=ASPNETCORE_ENVIRONMENT=Production
+# Keep servers.json and usersettings.json in a persistent directory
+Environment=DOTNET_ContentRootPath=/opt/gameserver-ui
+
+# Allow the app to call systemctl for system services
+# If using user services instead, remove this and add:
+#   sudo loginctl enable-linger YOUR_USER
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target

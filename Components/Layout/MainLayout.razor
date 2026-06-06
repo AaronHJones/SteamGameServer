@@ -1,0 +1,80 @@
+﻿@inherits LayoutComponentBase
+@inject GameServerManager Manager
+
+<MudThemeProvider @ref="_themeProvider" Theme="_theme" IsDarkMode="true" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="2" Style="background:#12121f;">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
+                       OnClick="ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-2 d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.Storage" Style="color:#ff6b35;" />
+            Game Server Monitor
+        </MudText>
+        <MudSpacer />
+
+        @{
+            var monitors = Manager.GetAll();
+            var online = monitors.Count(m => m.GetSnapshot().IsOnline);
+            var total = monitors.Count;
+        }
+        @if (total > 0)
+        {
+            <MudChip T="string" Size="Size.Small"
+                     Color="@(online == total ? Color.Success : online > 0 ? Color.Warning : Color.Error)"
+                     Variant="Variant.Outlined" Class="mr-2">
+                @online / @total online
+            </MudChip>
+        }
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen"
+               Elevation="2"
+               ClipMode="DrawerClipMode.Always"
+               Style="background:#0d0d1a;">
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private MudThemeProvider _themeProvider = null!;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#ff6b35",
+            PrimaryContrastText = "#ffffff",
+            Secondary = "#f7931e",
+            AppbarBackground = "#12121f",
+            Background = "#0a0a14",
+            BackgroundGray = "#12121f",
+            Surface = "#1a1a2e",
+            DrawerBackground = "#0d0d1a",
+            DrawerText = "rgba(255,255,255,0.85)",
+            DrawerIcon = "#ff6b35",
+            Success = "#4caf50",
+            Error = "#f44336",
+            Warning = "#ff9800",
+            Info = "#2196f3",
+            TextPrimary = "rgba(255,255,255,0.92)",
+            TextSecondary = "rgba(255,255,255,0.6)",
+            LinesDefault = "rgba(255,255,255,0.1)",
+            Divider = "rgba(255,255,255,0.1)"
+        }
+    };
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+}

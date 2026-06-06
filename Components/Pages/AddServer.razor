@@ -1,0 +1,273 @@
+@* Used both as a standalone page (/server/add) and embedded in ServerDetail's Settings tab *@
+@page "/server/add"
+@inject GameServerManager Manager
+@inject GameServerRegistry Registry
+@inject NavigationManager Nav
+
+@* When embedded as a component (Settings tab), ServerId is set by the parent *@
+
+<MudText Typo="Typo.h5" Class="mb-4 d-flex align-center gap-2" @ref="_headerRef">
+    <MudIcon Icon="@(_isEdit ? Icons.Material.Filled.Edit : Icons.Material.Filled.AddCircle)"
+             Style="color:#ff6b35;" />
+    @(_isEdit ? "Edit Server" : "Add Server")
+</MudText>
+
+<MudGrid Spacing="4">
+    <MudItem xs="12" md="7">
+        <MudPaper Class="pa-5" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.2);">
+
+            <MudForm @ref="_form" @bind-IsValid="_valid">
+
+                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color:#ff6b35;">Identity</MudText>
+
+                <MudTextField @bind-Value="_s.Name"
+                              Label="Display Name"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                              Required="true" RequiredError="Name is required" />
+
+                <MudSelect T="GameType" @bind-Value="_s.GameType"
+                           Label="Game Type"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                           AnchorOrigin="Origin.BottomLeft"
+                           TransformOrigin="Origin.TopLeft">
+                    @foreach (var gt in Enum.GetValues<GameType>())
+                    {
+                        var meta = GameServer.KnownGames[gt];
+                        <MudSelectItem T="GameType" Value="gt">@meta.DisplayName</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color:#ff6b35;">Connection</MudText>
+
+                <MudTextField @bind-Value="_s.Host"
+                              Label="Host / IP"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                              Required="true" />
+
+                <MudGrid Spacing="2" Class="mb-3">
+                    <MudItem xs="4">
+                        <MudNumericField T="int" @bind-Value="_s.GamePort"
+                                         Label="Game Port"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                                         Min="1" Max="65535" />
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudNumericField T="int" @bind-Value="_s.QueryPort"
+                                         Label="Query Port (UDP)"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                                         Min="1" Max="65535" />
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudNumericField T="int" @bind-Value="_s.RconPort"
+                                         Label="RCON Port"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                                         Min="1" Max="65535" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudTextField @bind-Value="_s.RconPassword"
+                              Label="RCON Password"
+                              Placeholder="leave blank for none"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                              InputType="@_pwType"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@_pwIcon"
+                              OnAdornmentClick="TogglePw" />
+
+                <MudGrid Spacing="2" Class="mb-3">
+                    <MudItem xs="6">
+                        <MudNumericField T="int" @bind-Value="_s.MaxPlayers"
+                                         Label="Max Players"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                                         Min="1" Max="1000" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudNumericField T="int" @bind-Value="_s.PollIntervalSeconds"
+                                         Label="Poll Interval (s)"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                                         Min="3" Max="300" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color:#ff6b35;">Service Control</MudText>
+
+                <MudTextField @bind-Value="_s.ServiceName"
+                              Label="systemd Service Name"
+                              Placeholder="e.g. rust-server"
+                              HelperText="Leave blank to disable start/stop control"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+                <MudCheckBox @bind-Value="_s.IsUserService" Label="User service (systemctl --user)"
+                             Color="Color.Primary" Class="mb-3" />
+
+                <MudTextField @bind-Value="_s.InstallDir"
+                              Label="Install Directory"
+                              Placeholder="/home/user/gameservers/rust"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+                <MudNumericField T="int" @bind-Value="_s.SteamAppId"
+                                 Label="Steam App ID"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-4"
+                                 HelperText="@SteamAppIdHint" />
+
+                <!-- Actions -->
+                <div class="d-flex align-center gap-3 flex-wrap">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="SaveAsync" Disabled="_saving">
+                        @(_saving ? "Saving…" : "Save")
+                    </MudButton>
+
+                    @if (_isEdit)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Delete"
+                                   OnClick="DeleteAsync">
+                            Remove Server
+                        </MudButton>
+                    }
+
+                    <MudButton Variant="Variant.Text" Color="Color.Default"
+                               OnClick='() => Nav.NavigateTo(_isEdit ? $"/server/{_s.Id}" : "/")'>
+                        Cancel
+                    </MudButton>
+                </div>
+
+            </MudForm>
+
+            @if (_saved)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mt-3">
+                    Saved successfully.
+                </MudAlert>
+            }
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@_error</MudAlert>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <!-- Port defaults hint panel -->
+    <MudItem xs="12" md="5">
+        <MudPaper Class="pa-4" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.2);">
+            <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color:#ff6b35;">Default Ports</MudText>
+            <MudSimpleTable Dense="true" Style="background:transparent;">
+                <thead>
+                    <tr>
+                        <th style="opacity:.5;">Game</th>
+                        <th style="opacity:.5;">Game</th>
+                        <th style="opacity:.5;">Query</th>
+                        <th style="opacity:.5;">RCON</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (gt, meta) in GameServer.KnownGames.Where(k => k.Key != GameType.Generic))
+                    {
+                        <tr @onclick="() => ApplyDefaults(gt)" style="cursor:pointer;"
+                            title="Click to apply these defaults">
+                            <td>@meta.DisplayName</td>
+                            <td><code>@meta.GamePort</code></td>
+                            <td><code>@meta.QueryPort</code></td>
+                            <td><code>@meta.RconPort</code></td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            <MudText Typo="Typo.caption" Class="mt-2" Style="opacity:.35;">
+                Click a row to apply its default ports.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    /// <summary>When set, this component is embedded in the Settings tab of ServerDetail.</summary>
+    [Parameter] public string? ServerId { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private GameServer _s = new();
+    private MudForm _form = null!;
+    private MudText _headerRef = null!;
+    private bool _valid, _saving, _saved;
+    private string? _error;
+    private bool _isEdit;
+    private InputType _pwType = InputType.Password;
+    private string _pwIcon = Icons.Material.Filled.VisibilityOff;
+
+    private string SteamAppIdHint =>
+        GameServer.KnownGames.TryGetValue(_s.GameType, out var m) && m.AppId > 0
+            ? $"Known App ID for {m.DisplayName}: {m.AppId}"
+            : "Used by SteamCMD install";
+
+    protected override void OnParametersSet()
+    {
+        var id = ServerId ?? (Nav.Uri.Contains("/server/add") ? null
+            : Nav.Uri.Split('/').LastOrDefault());
+
+        if (!string.IsNullOrWhiteSpace(id) && id != "add")
+        {
+            var existing = Registry.Get(id);
+            if (existing is not null)
+            {
+                // Clone so edits don't mutate the live object
+                _s = System.Text.Json.JsonSerializer.Deserialize<GameServer>(
+                    System.Text.Json.JsonSerializer.Serialize(existing))!;
+                _isEdit = true;
+                return;
+            }
+        }
+
+        // New server — apply defaults for Rust
+        _s = new GameServer();
+        ApplyDefaults(GameType.Rust);
+        _isEdit = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_valid) return;
+
+        _saving = true; _saved = false; _error = null;
+        try
+        {
+            if (_isEdit)
+                await Manager.ApplyServerSettingsAsync(_s);
+            else
+                await Registry.AddAsync(_s);
+
+            _saved = true;
+            if (OnSaved.HasDelegate) await OnSaved.InvokeAsync();
+            else Nav.NavigateTo($"/server/{_s.Id}");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _saving = false; }
+    }
+
+    private async Task DeleteAsync()
+    {
+        await Registry.RemoveAsync(_s.Id);
+        Nav.NavigateTo("/");
+    }
+
+    private void ApplyDefaults(GameType gt)
+    {
+        if (!GameServer.KnownGames.TryGetValue(gt, out var meta)) return;
+        _s.GameType = gt;
+        if (meta.GamePort > 0) _s.GamePort = meta.GamePort;
+        if (meta.QueryPort > 0) _s.QueryPort = meta.QueryPort;
+        if (meta.RconPort > 0) _s.RconPort = meta.RconPort;
+        if (meta.AppId > 0) _s.SteamAppId = meta.AppId;
+    }
+
+    private void TogglePw()
+    {
+        _pwType = _pwType == InputType.Password ? InputType.Text : InputType.Password;
+        _pwIcon = _pwType == InputType.Password
+            ? Icons.Material.Filled.VisibilityOff
+            : Icons.Material.Filled.Visibility;
+    }
+}

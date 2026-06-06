@@ -1,0 +1,69 @@
+﻿@inject GameServerManager Manager
+@inject NavigationManager Nav
+
+<MudNavMenu Class="pa-2">
+    <MudText Typo="Typo.overline"
+             Class="px-3 py-2"
+             Style="color:rgba(255,107,53,0.7); letter-spacing:0.12em;">
+        Overview
+    </MudText>
+
+    <MudNavLink Href="/"
+                Match="NavLinkMatch.All"
+                Icon="@Icons.Material.Filled.Dashboard"
+                IconColor="Color.Primary">
+        Dashboard
+    </MudNavLink>
+
+    <!-- Per-server links -->
+    @{
+        var monitors = Manager.GetAll();
+    }
+    @if (monitors.Any())
+    {
+        <MudDivider Class="my-2" />
+        <MudText Typo="Typo.overline"
+                 Class="px-3 py-1"
+                 Style="color:rgba(255,107,53,0.7); letter-spacing:0.12em;">
+            Servers
+        </MudText>
+        @foreach (var m in monitors)
+        {
+            var snap = m.GetSnapshot();
+            <MudNavLink Href="@($"/server/{m.ServerId}")"
+                        Match="NavLinkMatch.Prefix"
+                        Icon="@Icons.Material.Filled.Storage"
+                        IconColor="@(snap.IsOnline ? Color.Success : Color.Error)">
+                @m.Server.Name
+            </MudNavLink>
+        }
+    }
+
+    <MudDivider Class="my-2" />
+    <MudText Typo="Typo.overline"
+             Class="px-3 py-1"
+             Style="color:rgba(255,107,53,0.7); letter-spacing:0.12em;">
+        Management
+    </MudText>
+
+    <MudNavLink Href="/server/add"
+                Match="NavLinkMatch.All"
+                Icon="@Icons.Material.Filled.AddCircleOutline"
+                IconColor="Color.Primary">
+        Add Server
+    </MudNavLink>
+
+    <MudNavLink Href="/service/create"
+                Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.Build"
+                IconColor="Color.Primary">
+        Create Service
+    </MudNavLink>
+
+    <MudNavLink Href="/steamcmd"
+                Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.Download"
+                IconColor="Color.Primary">
+        SteamCMD Install
+    </MudNavLink>
+</MudNavMenu>

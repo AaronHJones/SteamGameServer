@@ -1,0 +1,82 @@
+/* ── Rust Server Monitor — Global Styles ─────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap');
+
+html, body {
+    background: #0a0a14;
+    color: rgba(255, 255, 255, 0.92);
+    height: 100%;
+}
+
+/* ── Log Viewer ──────────────────────────────────────────────────────── */
+.log-line {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 3px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    line-height: 1.5;
+    transition: background 0.1s;
+}
+
+.log-line:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.log-error  { background: rgba(244, 67,  54,  0.06); }
+.log-warn   { background: rgba(255, 152,  0,  0.05); }
+.log-info   { background: transparent; }
+
+.log-ts {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.72rem;
+    white-space: nowrap;
+    min-width: 60px;
+}
+
+.log-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    letter-spacing: 0.04em;
+}
+
+.badge-info    { background: rgba(33, 150, 243, 0.2);  color: #64b5f6; }
+.badge-warn    { background: rgba(255, 152,   0, 0.2); color: #ffb74d; }
+.badge-error   { background: rgba(244,  67,  54, 0.2); color: #ef9a9a; }
+
+.log-msg {
+    color: rgba(255, 255, 255, 0.78);
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+
+/* ── Status pulse animation ──────────────────────────────────────────── */
+@keyframes pulse-ring {
+    0%   { box-shadow: 0 0 0 0   rgba(76, 175, 80, 0.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(76, 175, 80, 0);   }
+    100% { box-shadow: 0 0 0 0   rgba(76, 175, 80, 0);   }
+}
+
+.status-pulse {
+    animation: pulse-ring 2s ease-out infinite;
+    border-radius: 50%;
+}
+
+/* ── MudBlazor overrides ─────────────────────────────────────────────── */
+.mud-nav-link.active {
+    background: rgba(255, 107, 53, 0.12) !important;
+    border-left: 3px solid #ff6b35;
+}
+
+.mud-table-row:hover td {
+    background: rgba(255, 107, 53, 0.05) !important;
+}
+
+/* ── Scrollbar styling ───────────────────────────────────────────────── */
+::-webkit-scrollbar            { width: 6px; height: 6px; }
+::-webkit-scrollbar-track      { background: rgba(255,255,255,0.03); }
+::-webkit-scrollbar-thumb      { background: rgba(255,107,53,0.35); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover{ background: rgba(255,107,53,0.6); }

@@ -1,0 +1,223 @@
+@page "/steamcmd"
+@inject ServiceController Svc
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>SteamCMD — Game Server Monitor</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-4 d-flex align-center gap-2">
+    <MudIcon Icon="@Icons.Material.Filled.Download" Style="color:#ff6b35;" />
+    Install Game Server (SteamCMD)
+</MudText>
+
+@if (!Svc.IsAvailable)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        SteamCMD installation runs on the Linux server. This form generates the commands — copy them to your server.
+    </MudAlert>
+}
+
+<MudGrid Spacing="4">
+    <!-- Config form -->
+    <MudItem xs="12" md="5">
+        <MudPaper Class="pa-5" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.2);">
+            <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color:#ff6b35;">Installation</MudText>
+
+            <MudSelect T="KnownGame" @bind-Value="_selected"
+                       Label="Game"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                       AnchorOrigin="Origin.BottomLeft">
+                @foreach (var g in _knownGames)
+                {
+                    <MudSelectItem T="KnownGame" Value="g">
+                        @g.Name <span style="opacity:.5; font-size:.8rem;"> — App @g.AppId</span>
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_installDir"
+                          Label="Install Directory"
+                          Placeholder="/home/youruser/gameservers/rust"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+            <MudCheckBox @bind-Value="_validate"
+                         Label="Validate files after install"
+                         Color="Color.Primary" Class="mb-4" />
+
+            @if (Svc.IsAvailable)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           Disabled="@(_running || string.IsNullOrWhiteSpace(_installDir))"
+                           OnClick="RunInstallAsync" Class="mb-2">
+                    @(_running ? "Installing…" : "Run Install")
+                </MudButton>
+
+                @if (_running)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error"
+                               OnClick="CancelInstall">
+                        Cancel
+                    </MudButton>
+                }
+            }
+        </MudPaper>
+
+        <!-- Steamcmd setup tip -->
+        <MudPaper Class="pa-4 mt-3" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.1);">
+            <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color:#ff6b35;">Need SteamCMD?</MudText>
+            <MudText Typo="Typo.caption" Style="opacity:.6; line-height:1.8;">
+                Install SteamCMD on Debian/Ubuntu:<br />
+            </MudText>
+            <pre style="font-size:.72rem; color:rgba(255,255,255,0.6); white-space:pre-wrap;">sudo apt install steamcmd</pre>
+            <MudText Typo="Typo.caption" Style="opacity:.6; line-height:1.8;">
+                Or download manually:<br />
+            </MudText>
+            <pre style="font-size:.72rem; color:rgba(255,255,255,0.6); white-space:pre-wrap;">curl -sqL "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz" | tar zxf -</pre>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Terminal output / command preview -->
+    <MudItem xs="12" md="7">
+        <MudPaper Class="pa-0" Style="background:#0d0d1a; border:1px solid rgba(255,107,53,0.15); border-radius:8px; overflow:hidden;">
+            <div class="pa-3 d-flex align-center justify-space-between"
+                 style="background:rgba(255,107,53,0.08); border-bottom:1px solid rgba(255,107,53,0.1);">
+                <MudText Typo="Typo.caption" Style="opacity:.6; font-family:'Roboto Mono',monospace;">
+                    @(Svc.IsAvailable ? "terminal output" : "generated commands")
+                </MudText>
+                @if (_lines.Count > 0)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy"
+                                   Size="Size.Small"
+                                   OnClick="CopyOutput" />
+                }
+            </div>
+
+            <div id="steamcmd-output"
+                 style="height:420px; overflow-y:auto; padding:12px;
+                        font-family:'Roboto Mono',monospace; font-size:.76rem;
+                        color:rgba(255,255,255,0.75);">
+                @if (_lines.Count == 0)
+                {
+                    <span style="opacity:.3;">
+                        @(Svc.IsAvailable
+                            ? "Output will appear here when the install runs…"
+                            : GeneratedCommands)
+                    </span>
+                }
+                else
+                {
+                    @foreach (var line in _lines)
+                    {
+                        <div style="@LineStyle(line)">@line</div>
+                    }
+                }
+            </div>
+        </MudPaper>
+
+        @if (_exitCode.HasValue)
+        {
+            <MudAlert Severity="@(_exitCode == 0 ? Severity.Success : Severity.Error)"
+                      Dense="true" Class="mt-2">
+                @(_exitCode == 0
+                    ? $"Installation completed successfully."
+                    : $"Installation exited with code {_exitCode}.")
+            </MudAlert>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private record KnownGame(string Name, int AppId, bool AnonLogin);
+
+    private readonly List<KnownGame> _knownGames =
+    [
+        new("Rust Dedicated Server",         258550,  true),
+        new("Palworld Dedicated Server",     2394010, true),
+        new("7 Days to Die Dedicated",       294420,  true),
+        new("Valheim Dedicated Server",      896660,  true),
+        new("ARK: SE Dedicated",             376030,  true),
+        new("Project Zomboid Dedicated",     380870,  true),
+        new("Custom App ID",                 0,       true),
+    ];
+
+    private KnownGame _selected = null!;
+    private string _installDir = "/home/youruser/gameservers";
+    private bool _validate = true;
+    private bool _running;
+    private CancellationTokenSource? _cts;
+    private List<string> _lines = [];
+    private int? _exitCode;
+
+    protected override void OnInitialized() => _selected = _knownGames[0];
+
+    private string GeneratedCommands =>
+$$"""
+mkdir -p {{_installDir}}
+steamcmd \
+  +force_install_dir {{_installDir}} \
+  +login anonymous \
+  +app_update {{(_selected.AppId > 0 ? _selected.AppId : 0)}} {{(_validate ? "+validate" : "")}} \
+  +quit
+""";
+
+    private async Task RunInstallAsync()
+    {
+        _running = true;
+        _lines = [];
+        _exitCode = null;
+        _cts = new CancellationTokenSource();
+        StateHasChanged();
+
+        Directory.CreateDirectory(_installDir);
+
+        var steamcmdArgs =
+            $"+force_install_dir {_installDir} " +
+            $"+login anonymous " +
+            $"+app_update {_selected.AppId} " +
+            (_validate ? "+validate " : "") +
+            "+quit";
+
+        // Run steamcmd, stream output line by line
+        await Task.Run(async () =>
+        {
+            var (code, output) = await Svc.RunAsync("steamcmd", steamcmdArgs);
+            _exitCode = code;
+
+            foreach (var line in output.Split('\n'))
+            {
+                _lines.Add(line);
+                await InvokeAsync(StateHasChanged);
+                await JS.InvokeVoidAsync("rustMonitor.scrollToBottom", "steamcmd-output");
+            }
+        }, _cts.Token);
+
+        _running = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CancelInstall()
+    {
+        _cts?.Cancel();
+        _running = false;
+        _lines.Add("[cancelled by user]");
+    }
+
+    private async Task CopyOutput() =>
+        await JS.InvokeVoidAsync("rustMonitor.copyToClipboard", string.Join('\n', _lines));
+
+    private static string LineStyle(string line)
+    {
+        if (line.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("FAIL", StringComparison.OrdinalIgnoreCase))
+            return "color:#ef9a9a;";
+        if (line.Contains("Success", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("completed", StringComparison.OrdinalIgnoreCase))
+            return "color:#a5d6a7;";
+        if (line.StartsWith("Update state"))
+            return "color:#ff6b35;";
+        return "";
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

@@ -1,0 +1,149 @@
+@inject GameServerManager Manager
+@inject ServiceController Svc
+@inject NavigationManager Nav
+
+<MudPaper Class="pa-0 server-card"
+          Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.2);
+                 border-radius:8px; overflow:hidden; transition: border-color 0.2s;"
+          @onclick="GoToDetail">
+
+    <!-- Color bar by game type -->
+    <div style="height:3px; background:@GameColor;"></div>
+
+    <div class="pa-3">
+        <!-- Header row -->
+        <div class="d-flex align-center justify-space-between mb-2">
+            <MudText Typo="Typo.subtitle2" Style="font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:160px;">
+                @Server.Name
+            </MudText>
+            <MudChip T="string"
+                     Size="Size.Small"
+                     Color="@(Snap.IsOnline ? Color.Success : Color.Error)"
+                     Variant="Variant.Filled"
+                     Style="height:20px; font-size:0.65rem;">
+                @(Snap.IsOnline ? "Online" : "Offline")
+            </MudChip>
+        </div>
+
+        <!-- Game type badge -->
+        <MudText Typo="Typo.caption" Style="opacity:0.5; margin-bottom:8px; display:block;">
+            @GameMeta.DisplayName &nbsp;·&nbsp; @Server.Host
+        </MudText>
+
+        <!-- Player count -->
+        <div class="d-flex align-center gap-2 mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Small" Style="@($"color:{GameColor};")" />
+            <MudText Typo="Typo.body2">
+                @Snap.Players.Count
+                <span style="opacity:0.45;">/ @(Snap.Info?.MaxPlayers ?? Server.MaxPlayers)</span>
+            </MudText>
+            @if (!string.IsNullOrEmpty(Snap.Info?.Map))
+            {
+                <MudText Typo="Typo.caption" Style="opacity:0.45; margin-left:auto;">
+                    @Snap.Info.Map
+                </MudText>
+            }
+        </div>
+
+        <!-- Player bar -->
+        <MudProgressLinear Value="@PlayerPct"
+                           Color="Color.Primary"
+                           Style="height:4px; border-radius:2px; margin-bottom:10px;"
+                           Rounded="true" />
+
+        <!-- Service state + controls -->
+        <div class="d-flex align-center justify-space-between" @onclick:stopPropagation="true">
+            <div class="d-flex align-center gap-1">
+                <div class="svc-dot" style="@SvcDotStyle"></div>
+                <MudText Typo="Typo.caption" Style="opacity:0.55;">@SvcLabel</MudText>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Server.ServiceName) && Svc.IsAvailable)
+            {
+                <div class="d-flex gap-1">
+                    <MudTooltip Text="Start service">
+                        <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
+                                       Size="Size.Small"
+                                       Color="Color.Success"
+                                       Disabled="@(Snap.ServiceState == ServiceState.Running || _busy)"
+                                       OnClick="StartServiceAsync" />
+                    </MudTooltip>
+                    <MudTooltip Text="Stop service">
+                        <MudIconButton Icon="@Icons.Material.Filled.Stop"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       Disabled="@(Snap.ServiceState == ServiceState.Stopped || _busy)"
+                                       OnClick="StopServiceAsync" />
+                    </MudTooltip>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(Server.ServiceName) && !Svc.IsAvailable)
+            {
+                <MudTooltip Text="Service control requires Linux">
+                    <MudIcon Icon="@Icons.Material.Filled.LaptopWindows"
+                             Size="Size.Small"
+                             Style="opacity:0.3;" />
+                </MudTooltip>
+            }
+        </div>
+    </div>
+</MudPaper>
+
+<style>
+    .server-card { cursor: pointer; }
+    .server-card:hover { border-color: rgba(255,107,53,0.55) !important; }
+    .svc-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+</style>
+
+@code {
+    [Parameter, EditorRequired] public GameServer Server { get; set; } = null!;
+    [Parameter, EditorRequired] public ServerSnapshot Snap { get; set; } = null!;
+
+    private bool _busy;
+
+    private GameMeta GameMeta => GameServer.KnownGames.TryGetValue(Server.GameType, out var m)
+        ? m : GameServer.KnownGames[GameType.Generic];
+
+    private string GameColor => Server.GameType switch
+    {
+        GameType.Rust           => "#ff6b35",
+        GameType.PalWorld       => "#4caf50",
+        GameType.SevenDaysToDie => "#9c27b0",
+        _                       => "#607d8b"
+    };
+
+    private double PlayerPct => Snap.Info is not null && Snap.Info.MaxPlayers > 0
+        ? (double)Snap.Players.Count / Snap.Info.MaxPlayers * 100 : 0;
+
+    private string SvcLabel => Snap.ServiceState switch
+    {
+        ServiceState.Running => "Running",
+        ServiceState.Stopped => "Stopped",
+        ServiceState.Failed  => "Failed",
+        _                    => string.IsNullOrWhiteSpace(Server.ServiceName) ? "No service" : "Unknown"
+    };
+
+    private string SvcDotStyle => Snap.ServiceState switch
+    {
+        ServiceState.Running => "background:#4caf50;",
+        ServiceState.Stopped => "background:#607d8b;",
+        ServiceState.Failed  => "background:#f44336;",
+        _                    => "background:#607d8b;"
+    };
+
+    private async Task StartServiceAsync()
+    {
+        _busy = true;
+        await Svc.StartAsync(Server.ServiceName, Server.IsUserService);
+        _busy = false;
+    }
+
+    private async Task StopServiceAsync()
+    {
+        _busy = true;
+        await Svc.StopAsync(Server.ServiceName, Server.IsUserService);
+        _busy = false;
+    }
+
+    private void GoToDetail() => Nav.NavigateTo($"/server/{Server.Id}");
+}

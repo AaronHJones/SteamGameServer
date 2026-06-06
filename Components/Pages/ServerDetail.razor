@@ -1,0 +1,358 @@
+@page "/server/{Id}"
+@inject GameServerManager Manager
+@inject GameServerRegistry Registry
+@inject ServiceController Svc
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>@(_monitor?.Server.Name ?? "Server") — Game Server Monitor</PageTitle>
+
+@if (_monitor is null)
+{
+    <MudAlert Severity="Severity.Error">Server "@Id" not found.</MudAlert>
+    return;
+}
+
+@{
+    var server = _monitor.Server;
+    var snap = _monitor.GetSnapshot();
+    var meta = GameServer.KnownGames.TryGetValue(server.GameType, out var m)
+        ? m : GameServer.KnownGames[GameType.Generic];
+    string gameColor = server.GameType switch
+    {
+        GameType.Rust           => "#ff6b35",
+        GameType.PalWorld       => "#4caf50",
+        GameType.SevenDaysToDie => "#9c27b0",
+        _                       => "#607d8b"
+    };
+}
+
+<!-- Page header -->
+<div class="d-flex align-center justify-space-between mb-4 flex-wrap gap-2">
+    <div class="d-flex align-center gap-3">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                       OnClick='() => Nav.NavigateTo("/")'
+                       Size="Size.Small" />
+        <MudText Typo="Typo.h5" Class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.Storage" Style="@($"color:{gameColor};")" />
+            @server.Name
+        </MudText>
+        <MudChip T="string"
+                 Size="Size.Small"
+                 Color="@(snap.IsOnline ? Color.Success : Color.Error)">
+            @(snap.IsOnline ? "Online" : "Offline")
+        </MudChip>
+    </div>
+
+    <!-- Service start/stop -->
+    @if (!string.IsNullOrWhiteSpace(server.ServiceName))
+    {
+        <div class="d-flex gap-2 align-center">
+            <MudText Typo="Typo.caption" Style="opacity:0.45;">@snap.ServiceState</MudText>
+            @if (Svc.IsAvailable)
+            {
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Success"
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           Disabled="@(snap.ServiceState == ServiceState.Running || _busy)"
+                           OnClick="StartServiceAsync">
+                    Start
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Error"
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Stop"
+                           Disabled="@(snap.ServiceState == ServiceState.Stopped || _busy)"
+                           OnClick="StopServiceAsync">
+                    Stop
+                </MudButton>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Style="opacity:0.3;">
+                    (service control — Linux only)
+                </MudText>
+            }
+        </div>
+    }
+</div>
+
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true"
+         @bind-ActivePanelIndex="_tab">
+
+    <!-- ── Tab 0: Overview ──────────────────────────────────────── -->
+    <MudTabPanel Text="Overview" Icon="@Icons.Material.Filled.BarChart">
+
+        <MudGrid Spacing="3" Class="mb-4">
+            <MudItem xs="6" md="3">
+                <MudPaper Class="pa-3 text-center" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.15);">
+                    <MudText Typo="Typo.h5" Style="@($"color:{gameColor};")">
+                        @snap.Players.Count <span style="font-size:1rem; opacity:.45;">/ @(snap.Info?.MaxPlayers ?? server.MaxPlayers)</span>
+                    </MudText>
+                    <MudText Typo="Typo.caption" Style="opacity:.5;">Players</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudPaper Class="pa-3 text-center" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.15);">
+                    <MudText Typo="Typo.body1" Style="font-weight:600;">@(snap.Info?.Map ?? "—")</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity:.5;">Map</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudPaper Class="pa-3 text-center" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.15);">
+                    <MudText Typo="Typo.body1" Style="font-weight:600;">@meta.DisplayName</MudText>
+                    <MudText Typo="Typo.caption" Style="opacity:.5;">Game</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudPaper Class="pa-3 text-center" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.15);">
+                    <MudIcon Icon="@(snap.RconConnected ? Icons.Material.Filled.Cable : Icons.Material.Outlined.Cable)"
+                             Style="@($"color:{(snap.RconConnected ? "#4caf50" : "#ff9800")};")" />
+                    <MudText Typo="Typo.caption" Style="opacity:.5; display:block;">RCON</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Player history chart -->
+        <MudPaper Class="pa-4" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.15);">
+            <MudText Typo="Typo.subtitle2" Class="mb-3" Style="@($"color:{gameColor};")">
+                Player Count History
+            </MudText>
+            <div style="height:200px; position:relative;">
+                <canvas id="chart-@Id"></canvas>
+            </div>
+        </MudPaper>
+
+        @if (snap.Info is not null)
+        {
+            <MudPaper Class="pa-4 mt-3" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.15);">
+                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="@($"color:{gameColor};")">
+                    Server Info
+                </MudText>
+                <MudSimpleTable Dense="true" Style="background:transparent;">
+                    <tbody>
+                        <tr><td style="opacity:.55; width:40%;">Name</td><td>@snap.Info.Name</td></tr>
+                        <tr><td style="opacity:.55;">Version</td><td>@snap.Info.Version</td></tr>
+                        <tr><td style="opacity:.55;">VAC</td><td>@(snap.Info.IsVac ? "Secured" : "Unsecured")</td></tr>
+                        <tr><td style="opacity:.55;">Password</td><td>@(snap.Info.HasPassword ? "Yes" : "No")</td></tr>
+                        @if (!string.IsNullOrEmpty(snap.Info.Keywords))
+                        {
+                            <tr><td style="opacity:.55;">Tags</td><td style="font-size:.75rem;">@snap.Info.Keywords</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        }
+
+        <MudText Typo="Typo.caption" Class="mt-3 d-block" Style="opacity:.35;">
+            Updated: @(snap.LastUpdated == DateTime.MinValue ? "never" : snap.LastUpdated.ToString("HH:mm:ss"))
+        </MudText>
+    </MudTabPanel>
+
+    <!-- ── Tab 1: Players ───────────────────────────────────────── -->
+    <MudTabPanel Text="Players" Icon="@Icons.Material.Filled.People">
+        <div class="d-flex align-center justify-space-between mb-3">
+            <MudText Typo="Typo.subtitle1">
+                @snap.Players.Count online
+            </MudText>
+        </div>
+
+        @if (!snap.IsOnline)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true">Server is offline.</MudAlert>
+        }
+        else if (snap.Players.Count == 0)
+        {
+            <MudPaper Class="pa-6 text-center" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.15);">
+                <MudIcon Icon="@Icons.Material.Filled.PersonOff" Style="font-size:2.5rem; opacity:.3;" />
+                <MudText Typo="Typo.body2" Class="mt-2" Style="opacity:.5;">No players online</MudText>
+            </MudPaper>
+        }
+        else
+        {
+            <MudTable Items="@snap.Players" Dense="true" Hover="true" Elevation="0"
+                      Style="background:transparent;">
+                <HeaderContent>
+                    <MudTh Style="@($"color:{gameColor};")">Player</MudTh>
+                    <MudTh Style="@($"color:{gameColor};")">Score</MudTh>
+                    <MudTh Style="@($"color:{gameColor};")">Connected</MudTh>
+                    <MudTh Style="@($"color:{gameColor};")"></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>
+                        <div class="d-flex align-center gap-2">
+                            <MudAvatar Size="Size.Small"
+                                       Style="@($"background:{gameColor}; font-size:.75rem; width:26px; height:26px;")">
+                                @(context.Name.Length > 0 ? context.Name[0].ToString().ToUpper() : "?")
+                            </MudAvatar>
+                            @context.Name
+                        </div>
+                    </MudTd>
+                    <MudTd>@context.Score</MudTd>
+                    <MudTd>@FormatDuration(context.Duration)</MudTd>
+                    <MudTd>
+                        @{
+                            var max = Math.Max(snap.Players.Max(p => p.Duration.TotalMinutes), 1);
+                            var pct = Math.Min(100, context.Duration.TotalMinutes / max * 100);
+                        }
+                        <div style="background:rgba(255,255,255,0.08); border-radius:4px; height:5px; width:100px;">
+                            <div style="@($"background:{gameColor}; border-radius:4px; height:100%; width:{pct:F0}%;")"></div>
+                        </div>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <!-- ── Tab 2: Logs ──────────────────────────────────────────── -->
+    <MudTabPanel Text="Logs" Icon="@Icons.Material.Filled.Terminal">
+        <!-- toolbar -->
+        <div class="d-flex flex-wrap align-center gap-3 mb-3">
+            <MudTextField @bind-Value="_logSearch"
+                          Placeholder="Filter…"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Style="max-width:220px;" />
+
+            <MudToggleGroup T="string" @bind-Value="_logLevel"
+                            SelectionMode="SelectionMode.SingleSelection">
+                <MudToggleItem Value="@("All")">All</MudToggleItem>
+                <MudToggleItem Value="@("Info")">Info</MudToggleItem>
+                <MudToggleItem Value="@("Warning")">Warn</MudToggleItem>
+                <MudToggleItem Value="@("Error")">Error</MudToggleItem>
+            </MudToggleGroup>
+
+            <MudSpacer />
+            <MudToggleIconButton @bind-Toggled="_autoScroll"
+                                 Icon="@Icons.Material.Filled.VerticalAlignBottom"
+                                 ToggledIcon="@Icons.Material.Filled.VerticalAlignBottom"
+                                 Color="Color.Default"
+                                 ToggledColor="Color.Primary" />
+            <MudIconButton Icon="@Icons.Material.Filled.DeleteSweep"
+                           OnClick="ClearLogs" />
+        </div>
+
+        <MudPaper id="@($"log-panel-{Id}")"
+                  Style="background:#0d0d1a; border:1px solid rgba(255,107,53,0.1);
+                         height:480px; overflow-y:auto; font-family:'Roboto Mono',monospace; font-size:.76rem;">
+            <Virtualize Items="@FilteredLogs" Context="e" OverscanCount="20">
+                <div class="log-line @LogLineClass(e.Level)">
+                    <span class="log-ts">@e.Timestamp.ToString("HH:mm:ss")</span>
+                    <span class="log-badge @LogBadgeClass(e.Level)">@e.Level.ToString().ToUpper()[..4]</span>
+                    <span class="log-msg">@e.Message</span>
+                </div>
+            </Virtualize>
+        </MudPaper>
+
+        <MudText Typo="Typo.caption" Class="mt-1 d-block" Style="opacity:.35;">
+            @FilteredLogs.Count shown · @_logs.Count buffered
+        </MudText>
+    </MudTabPanel>
+
+    <!-- ── Tab 3: Settings ─────────────────────────────────────── -->
+    <MudTabPanel Text="Settings" Icon="@Icons.Material.Filled.Settings">
+        <AddServer ServerId="@Id" OnSaved="OnSettingsSaved" />
+    </MudTabPanel>
+
+</MudTabs>
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    private GameServerMonitor? _monitor;
+    private int _tab;
+    private bool _busy;
+    private List<LogEntry> _logs = [];
+    private string _logSearch = "";
+    private string _logLevel = "All";
+    private bool _autoScroll = true;
+
+    private List<LogEntry> FilteredLogs
+    {
+        get
+        {
+            var q = _logs.AsEnumerable();
+            if (_logLevel != "All" && Enum.TryParse<LogEntryLevel>(_logLevel, out var lv))
+                q = q.Where(l => l.Level == lv);
+            if (!string.IsNullOrWhiteSpace(_logSearch))
+                q = q.Where(l => l.Message.Contains(_logSearch, StringComparison.OrdinalIgnoreCase));
+            return q.ToList();
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        _monitor = Manager.GetMonitor(Id);
+        if (_monitor is not null)
+        {
+            _logs = _monitor.GetLogs();
+            _monitor.OnUpdate += OnUpdate;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await UpdateChartAsync();
+        if (_autoScroll && _tab == 2)
+            await JS.InvokeVoidAsync("rustMonitor.scrollToBottom", $"log-panel-{Id}");
+    }
+
+    private async void OnUpdate()
+    {
+        if (_monitor is null) return;
+        _logs = _monitor.GetLogs();
+        await InvokeAsync(StateHasChanged);
+        if (_tab == 0) await UpdateChartAsync();
+    }
+
+    private async Task UpdateChartAsync()
+    {
+        if (_monitor is null) return;
+        var h = _monitor.GetPlayerHistory();
+        await JS.InvokeVoidAsync("rustMonitor.updateChart",
+            $"chart-{Id}",
+            h.Select(x => x.Time.ToString("HH:mm")).ToArray(),
+            h.Select(x => x.Count).ToArray());
+    }
+
+    private async Task StartServiceAsync()
+    {
+        _busy = true;
+        await Svc.StartAsync(_monitor!.Server.ServiceName, _monitor.Server.IsUserService);
+        _busy = false;
+    }
+
+    private async Task StopServiceAsync()
+    {
+        _busy = true;
+        await Svc.StopAsync(_monitor!.Server.ServiceName, _monitor.Server.IsUserService);
+        _busy = false;
+    }
+
+    private void ClearLogs() => _logs = [];
+
+    private async Task OnSettingsSaved()
+    {
+        _monitor = Manager.GetMonitor(Id);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string FormatDuration(TimeSpan t) =>
+        t.TotalHours >= 1 ? $"{(int)t.TotalHours}h {t.Minutes:D2}m"
+        : t.TotalMinutes >= 1 ? $"{(int)t.TotalMinutes}m {t.Seconds:D2}s"
+        : $"{t.Seconds}s";
+
+    private static string LogLineClass(LogEntryLevel l) =>
+        l == LogEntryLevel.Error ? "log-error" : l == LogEntryLevel.Warning ? "log-warn" : "log-info";
+    private static string LogBadgeClass(LogEntryLevel l) =>
+        l == LogEntryLevel.Error ? "badge-error" : l == LogEntryLevel.Warning ? "badge-warn" : "badge-info";
+
+    public void Dispose()
+    {
+        if (_monitor is not null) _monitor.OnUpdate -= OnUpdate;
+    }
+}

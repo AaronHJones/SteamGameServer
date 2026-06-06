@@ -1,0 +1,142 @@
+@page "/service/create"
+@inject ServiceController Svc
+@inject NavigationManager Nav
+
+<PageTitle>Create Service — Game Server Monitor</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-4 d-flex align-center gap-2">
+    <MudIcon Icon="@Icons.Material.Filled.Build" Style="color:#ff6b35;" />
+    Create systemd Service
+</MudText>
+
+<MudGrid Spacing="4">
+    <!-- Form -->
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-5" Style="background:#1a1a2e; border:1px solid rgba(255,107,53,0.2);">
+            <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color:#ff6b35;">Service Definition</MudText>
+
+            <MudTextField @bind-Value="_name"
+                          Label="Service Name"
+                          Placeholder="e.g. palworld-server"
+                          HelperText="Filename will be {name}.service"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+            <MudTextField @bind-Value="_description"
+                          Label="Description"
+                          Placeholder="Palworld Dedicated Server"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+            <MudTextField @bind-Value="_user"
+                          Label="Run As User"
+                          Placeholder="youruser"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+            <MudTextField @bind-Value="_workDir"
+                          Label="Working Directory"
+                          Placeholder="/home/youruser/gameservers/palworld"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+            <MudTextField @bind-Value="_execStart"
+                          Label="ExecStart Command"
+                          Placeholder="/home/youruser/gameservers/palworld/PalServer.sh"
+                          Lines="3"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+
+            <MudSelect T="string" @bind-Value="_restart"
+                       Label="Restart Policy"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3">
+                <MudSelectItem T="string" Value="@("on-failure")">on-failure</MudSelectItem>
+                <MudSelectItem T="string" Value="@("always")">always</MudSelectItem>
+                <MudSelectItem T="string" Value="@("no")">no</MudSelectItem>
+            </MudSelect>
+
+            <MudNumericField T="int" @bind-Value="_restartSec"
+                             Label="Restart Delay (seconds)"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                             Min="1" Max="300" />
+
+            <MudCheckBox @bind-Value="_isUserService"
+                         Label="User service (systemctl --user)"
+                         Color="Color.Primary" Class="mb-4" />
+
+            <div class="d-flex gap-3 flex-wrap">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.InstallDesktop"
+                           Disabled="@(!Svc.IsAvailable || _busy || string.IsNullOrWhiteSpace(_name))"
+                           OnClick="InstallAsync">
+                    @(_busy ? "Installing…" : "Install on This Server")
+                </MudButton>
+            </div>
+
+            @if (!Svc.IsAvailable)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                    Running on Windows — copy the preview file to your Linux server manually.
+                </MudAlert>
+            }
+            @if (_result is not null)
+            {
+                <MudAlert Severity="@(_ok ? Severity.Success : Severity.Error)"
+                          Dense="true" Class="mt-3">
+                    @_result
+                </MudAlert>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <!-- Live preview -->
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Style="background:#0d0d1a; border:1px solid rgba(255,107,53,0.15); position:sticky; top:80px;">
+            <div class="d-flex align-center justify-space-between mb-2">
+                <MudText Typo="Typo.subtitle2" Style="color:#ff6b35;">
+                    @(_name is { Length: > 0 } n ? $"{n}.service" : "preview.service")
+                </MudText>
+            </div>
+            <pre style="font-family:'Roboto Mono',monospace; font-size:.78rem;
+                        color:rgba(255,255,255,0.75); white-space:pre-wrap;
+                        margin:0; line-height:1.6;">@GeneratedContent</pre>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private string _name = "";
+    private string _description = "Game Dedicated Server";
+    private string _user = "";
+    private string _workDir = "";
+    private string _execStart = "";
+    private string _restart = "on-failure";
+    private int _restartSec = 10;
+    private bool _isUserService;
+    private bool _busy;
+    private string? _result;
+    private bool _ok;
+
+    private string GeneratedContent =>
+$$"""
+[Unit]
+Description={{_description}}
+After=network.target
+
+[Service]
+Type=simple
+User={{_user}}
+WorkingDirectory={{_workDir}}
+ExecStart={{_execStart}}
+Restart={{_restart}}
+RestartSec={{_restartSec}}
+
+[Install]
+WantedBy={{(_isUserService ? "default" : "multi-user")}}.target
+""";
+
+    private async Task InstallAsync()
+    {
+        _busy = true; _result = null;
+        var (ok, output) = await Svc.InstallServiceAsync(
+            _name, GeneratedContent, _isUserService);
+        _ok = ok;
+        _result = ok ? $"Installed and enabled {_name}.service" : output;
+        _busy = false;
+    }
+}

@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "module": "none",
+    "lib": ["ES2017", "DOM"],
+    "outFile": "wwwroot/js/app.js",
+    "strict": true,
+    "noImplicitAny": true,
+    "sourceMap": true,
+    "removeComments": false
+  },
+  "include": ["wwwroot/ts/**/*.ts"],
+  "exclude": ["node_modules"]
+}

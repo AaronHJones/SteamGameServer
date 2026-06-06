@@ -1,0 +1,27 @@
+# Build output
+bin/
+obj/
+
+# .NET user files
+*.user
+*.suo
+.vs/
+
+# Runtime data (contains your server configs and secrets)
+servers.json
+usersettings.json
+
+# Local settings overrides
+appsettings.*.local.json
+
+# Debug / personal logs
+docs/bug_check_log.log
+
+# macOS
+.DS_Store
+
+# JetBrains
+.idea/
+
+# Node (if any tooling is added)
+node_modules/
